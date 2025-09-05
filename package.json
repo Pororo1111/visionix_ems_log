@@ -1,0 +1,30 @@
+{
+  "name": "visionx-ems-log",
+  "version": "1.0.0",
+  "description": "Prometheus 메트릭 수집 및 PostgreSQL(TimescaleDB) 저장 서비스",
+  "main": "dist/main.js",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx watch src/main.ts",
+    "start": "node dist/main.js",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:push": "drizzle-kit push"
+  },
+  "keywords": ["prometheus", "postgresql", "timescaledb", "monitoring", "typescript"],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "drizzle-orm": "^0.44.2",
+    "pg": "^8.16.2",
+    "axios": "^1.6.7",
+    "dotenv": "^16.4.4"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.19",
+    "@types/pg": "^8.10.9",
+    "drizzle-kit": "^0.31.2",
+    "tsx": "^4.7.1",
+    "typescript": "^5.3.3"
+  }
+}
