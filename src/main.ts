@@ -1,6 +1,7 @@
 import { testConnection, closeConnection } from "./db";
 import { startServer } from "./server";
 import { DashboardService } from "./services/dashboard";
+import { seedDatabase } from "./db/seed";
 
 async function main() {
   console.log("🚀 VisionX EMS 마이크로서비스 서버 시작");
@@ -9,10 +10,13 @@ async function main() {
     // 1. 데이터베이스 연결 테스트
     await testConnection();
 
-    // 2. HTTP 서버 시작
+    // 2. 초기 데이터 삽입 (error_codes 등)
+    await seedDatabase();
+
+    // 3. HTTP 서버 시작
     const server = startServer();
 
-    // 3. 대시보드 서비스 초기화 및 주기적 업데이트 시작
+    // 4. 대시보드 서비스 초기화 및 주기적 업데이트 시작
     const dashboardService = new DashboardService();
     
     // 초기 업데이트 실행
