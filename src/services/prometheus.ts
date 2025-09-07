@@ -19,8 +19,8 @@ interface PrometheusQueryResult {
 interface DeviceMetricData {
   deviceName: string;
   isOnline: boolean;
-  cpuUsage?: number;
-  memoryUsage?: number;
+  cpuUsage?: number | null;
+  memoryUsage?: number | null;
   temperature?: number;
 }
 
@@ -53,19 +53,19 @@ export class PrometheusService {
     }
   }
 
-  async getAppStatus(): Promise<number | null> {
+  async getCameraValue(): Promise<number | null> {
     try {
-      const result = await this.queryMetric("app_status");
+      const result = await this.queryMetric("camera_value");
       
       if (result.length === 0) {
-        console.warn("app_status 메트릭을 찾을 수 없습니다");
+        console.warn("camera_value 메트릭을 찾을 수 없습니다");
         return null;
       }
 
       const value = parseInt(result[0].value[1]);
       return value;
     } catch (error) {
-      console.error("app_status 조회 실패:", error);
+      console.error("camera_value 조회 실패:", error);
       return null;
     }
   }

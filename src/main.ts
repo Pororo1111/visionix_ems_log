@@ -1,44 +1,54 @@
 import { testConnection, closeConnection } from "./db";
-import { MetricsCollector } from "./jobs/collector";
+import { startServer } from "./server";
+import { DashboardService } from "./services/dashboard";
 
 async function main() {
-  console.log("🚀 VisionX EMS 데이터 수집기 시작");
+  console.log("🚀 VisionX EMS 마이크로서비스 서버 시작");
 
   try {
     // 1. 데이터베이스 연결 테스트
     await testConnection();
 
-    // 2. 메트릭 수집기 초기화
-    const collector = new MetricsCollector();
-    await collector.initializeErrorCodes();
+    // 2. HTTP 서버 시작
+    const server = startServer();
 
-    // 3. 메트릭 수집 시작
-    collector.start(5000);
+    // 3. 대시보드 서비스 초기화 및 주기적 업데이트 시작
+    const dashboardService = new DashboardService();
+    
+    // 초기 업데이트 실행
+    console.log("📊 초기 대시보드 요약정보 업데이트 실행...");
+    await dashboardService.updateDashboardSummary();
+    
+    // 5초마다 주기적 업데이트
+    const updateInterval = setInterval(async () => {
+      await dashboardService.updateDashboardSummary();
+    }, 5000);
+    
+    console.log("📊 대시보드 요약정보 주기적 업데이트 시작 (5초 간격)");
 
     const gracefulShutdown = async () => {
       console.log("\n🛑 종료 신호 수신...");
       
-      // 수집기 중지
-      collector.stop();
+      // 주기적 업데이트 중지
+      clearInterval(updateInterval);
+      
+      // HTTP 서버 종료
+      server.close();
       
       // DB 연결 종료
       await closeConnection();
       
-      console.log("✅ 데이터 수집기가 정상적으로 종료되었습니다.");
+      console.log("✅ 마이크로서비스 서버가 정상적으로 종료되었습니다.");
       process.exit(0);
     };
 
     process.on("SIGINT", gracefulShutdown);
     process.on("SIGTERM", gracefulShutdown);
 
-    console.log("✅ 데이터 수집기가 성공적으로 시작되었습니다.");
-    console.log("📊 기본 메트릭 수집: 5초 간격 (app_status, ocr_value)");
-    console.log("📈 대시보드 데이터 수집: 5초 간격 (장비 헬스체크, 리소스, 집계)");
-    console.log("🗄️ 데이터는 PostgreSQL 데이터베이스에 저장됩니다.");
-    console.log("종료하려면 Ctrl+C를 누르세요.");
+    console.log("✅ 마이크로서비스 서버가 성공적으로 시작되었습니다.");
 
   } catch (error) {
-    console.error("❌ 데이터 수집기 시작 실패:", error);
+    console.error("❌ 마이크로서비스 서버 시작 실패:", error);
     process.exit(1);
   }
 }

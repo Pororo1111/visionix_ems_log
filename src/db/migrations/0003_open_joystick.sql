@@ -1,1 +1,0 @@
-ALTER TABLE "app_logs" DROP COLUMN "ocr_value";
