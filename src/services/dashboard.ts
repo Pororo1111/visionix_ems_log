@@ -1,5 +1,5 @@
 import { db } from "../db/index";
-import { dashboardSummary } from "../db/schema";
+import { dashboardSummary, deviceErrorLogs } from "../db/schema";
 import { PrometheusService } from "./prometheus";
 import { sql } from "drizzle-orm";
 
@@ -30,23 +30,28 @@ export class DashboardService {
     try {
       console.log("📊 대시보드 요약 데이터 업데이트 시작...");
 
-      // 1. Prometheus에서 camera_value 조회
-      const cameraValue = await this.prometheus.getCameraValue();
+      // 1. Prometheus에서 camera_value와 instance 조회
+      const cameraResult = await this.prometheus.getCameraValue();
       let normalCount = 0;
       let abnormalCount = 0;
       
-      if (cameraValue !== null) {
+      if (cameraResult !== null) {
+        const { value: cameraValue, instance } = cameraResult;
+        
         if (cameraValue === 0) {
           normalCount = 1;
           abnormalCount = 0;
         } else {
           normalCount = 0;
           abnormalCount = 1;
+          
+          // 에러 상태일 때마다 UPSERT로 최종 발생 시간 업데이트
+          await this.logDeviceErrorWithIp(instance, cameraValue);
         }
         
         // 에러 상태별 메시지
         const statusMessage = this.getStatusMessage(cameraValue);
-        console.log(`📊 현재 camera_value: ${cameraValue} (${statusMessage})`);
+        console.log(`📊 현재 camera_value: ${cameraValue} (${statusMessage}) - instance: ${instance}`);
       } else {
         console.warn("⚠️ camera_value 메트릭을 찾을 수 없어 상태 집계를 0으로 설정");
         // camera_value가 null이면 정상/비정상 모두 0으로 설정
@@ -135,6 +140,112 @@ export class DashboardService {
     };
     
     return statusMap[cameraValue] || `알 수 없는 상태 (${cameraValue})`;
+  }
+
+
+  /**
+   * 장비 IP로 에러 로그를 UPSERT 방식으로 저장/업데이트
+   */
+  private async logDeviceErrorWithIp(deviceIp: string, errorCode: number): Promise<void> {
+    try {
+      const errorMessage = this.getStatusMessage(errorCode);
+      const currentTime = new Date();
+      
+      // 기존 레코드 찾기
+      const existingLog = await db
+        .select()
+        .from(deviceErrorLogs)
+        .where(sql`device_ip = ${deviceIp}`)
+        .limit(1);
+
+      if (existingLog.length > 0) {
+        // 기존 레코드가 있으면 업데이트
+        await db
+          .update(deviceErrorLogs)
+          .set({
+            errorCode,
+            errorMessage,
+            lastOccurredAt: currentTime,
+            isRead: false // 새로운 에러 발생으로 읽지 않음 상태로 변경
+          })
+          .where(sql`device_ip = ${deviceIp}`);
+        
+        console.log(`🔄 에러 로그 업데이트 - IP: ${deviceIp}, 에러코드: ${errorCode} (${errorMessage})`);
+      } else {
+        // 새 레코드 생성
+        await db.insert(deviceErrorLogs).values({
+          deviceIp,
+          errorCode,
+          errorMessage,
+          occurredAt: currentTime,
+          lastOccurredAt: currentTime,
+          isRead: false
+        });
+        
+        console.log(`🚨 에러 로그 신규 생성 - IP: ${deviceIp}, 에러코드: ${errorCode} (${errorMessage})`);
+      }
+    } catch (error) {
+      console.error("❌ 에러 로그 UPSERT 실패:", error);
+    }
+  }
+
+
+  /**
+   * 읽지 않은 에러 로그 조회
+   */
+  async getUnreadErrorLogs() {
+    try {
+      const unreadLogs = await db
+        .select()
+        .from(deviceErrorLogs)
+        .where(sql`is_read = false`)
+        .orderBy(sql`occurred_at DESC`);
+      
+      return unreadLogs;
+    } catch (error) {
+      console.error('❌ 읽지 않은 에러 로그 조회 오류:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * 에러 로그 읽음 처리
+   */
+  async markErrorLogAsRead(logId: number): Promise<void> {
+    try {
+      await db
+        .update(deviceErrorLogs)
+        .set({ 
+          isRead: true, 
+          readAt: new Date() 
+        })
+        .where(sql`id = ${logId}`);
+      
+      console.log(`✅ 에러 로그 읽음 처리 완료 - ID: ${logId}`);
+    } catch (error) {
+      console.error('❌ 에러 로그 읽음 처리 오류:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * 모든 에러 로그를 읽음 처리
+   */
+  async markAllErrorLogsAsRead(): Promise<void> {
+    try {
+      await db
+        .update(deviceErrorLogs)
+        .set({ 
+          isRead: true, 
+          readAt: new Date() 
+        })
+        .where(sql`is_read = false`);
+      
+      console.log(`✅ 모든 에러 로그 읽음 처리 완료`);
+    } catch (error) {
+      console.error('❌ 모든 에러 로그 읽음 처리 오류:', error);
+      throw error;
+    }
   }
 }
 

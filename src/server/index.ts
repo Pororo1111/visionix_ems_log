@@ -3,6 +3,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import { db } from '../db/index';
 import { dashboardSummary } from '../db/schema';
+import { dashboardService } from '../services/dashboard';
 import { sql } from 'drizzle-orm';
 
 const app: Express = express();
@@ -49,6 +50,73 @@ app.get('/api/dashboard-summary', async (req, res) => {
   }
 });
 
+// 읽지 않은 에러 로그 조회 API
+app.get('/api/error-logs/unread', async (req, res) => {
+  try {
+    const unreadLogs = await dashboardService.getUnreadErrorLogs();
+    
+    res.json({
+      success: true,
+      data: unreadLogs,
+      count: unreadLogs.length,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('읽지 않은 에러 로그 조회 오류:', error);
+    res.status(500).json({ 
+      error: '서버 오류가 발생했습니다',
+      message: 'Internal server error'
+    });
+  }
+});
+
+// 에러 로그 읽음 처리 API
+app.post('/api/error-logs/:id/mark-read', async (req, res) => {
+  try {
+    const logId = parseInt(req.params.id);
+    
+    if (isNaN(logId)) {
+      return res.status(400).json({
+        error: '잘못된 로그 ID입니다',
+        message: 'Invalid log ID'
+      });
+    }
+
+    await dashboardService.markErrorLogAsRead(logId);
+    
+    res.json({
+      success: true,
+      message: '에러 로그가 읽음 처리되었습니다',
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('에러 로그 읽음 처리 오류:', error);
+    res.status(500).json({ 
+      error: '서버 오류가 발생했습니다',
+      message: 'Internal server error'
+    });
+  }
+});
+
+// 모든 에러 로그 읽음 처리 API
+app.post('/api/error-logs/mark-all-read', async (req, res) => {
+  try {
+    await dashboardService.markAllErrorLogsAsRead();
+    
+    res.json({
+      success: true,
+      message: '모든 에러 로그가 읽음 처리되었습니다',
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('모든 에러 로그 읽음 처리 오류:', error);
+    res.status(500).json({ 
+      error: '서버 오류가 발생했습니다',
+      message: 'Internal server error'
+    });
+  }
+});
+
 
 // 에러 핸들링 미들웨어
 app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
@@ -71,6 +139,9 @@ export function startServer() {
   const server = app.listen(PORT, () => {
     console.log(`🚀 마이크로서비스 서버가 포트 ${PORT}에서 실행 중입니다`);
     console.log(`📊 대시보드 요약 API: http://localhost:${PORT}/api/dashboard-summary`);
+    console.log(`🚨 읽지 않은 에러 로그 API: http://localhost:${PORT}/api/error-logs/unread`);
+    console.log(`✅ 에러 로그 읽음 처리 API: http://localhost:${PORT}/api/error-logs/:id/mark-read`);
+    console.log(`✅ 모든 에러 로그 읽음 처리 API: http://localhost:${PORT}/api/error-logs/mark-all-read`);
     console.log(`❤️ 헬스 체크: http://localhost:${PORT}/health`);
   });
 

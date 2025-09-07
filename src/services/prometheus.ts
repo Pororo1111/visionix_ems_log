@@ -53,7 +53,7 @@ export class PrometheusService {
     }
   }
 
-  async getCameraValue(): Promise<number | null> {
+  async getCameraValue(): Promise<{ value: number; instance: string } | null> {
     try {
       const result = await this.queryMetric("camera_value");
       
@@ -63,7 +63,20 @@ export class PrometheusService {
       }
 
       const value = parseInt(result[0].value[1]);
-      return value;
+      const instance = result[0].metric.instance || 'unknown';
+      
+      return { value, instance };
+    } catch (error) {
+      console.error("camera_value 조회 실패:", error);
+      return null;
+    }
+  }
+
+  // 기존 호환성을 위한 메서드 (deprecated)
+  async getCameraValueOnly(): Promise<number | null> {
+    try {
+      const result = await this.getCameraValue();
+      return result ? result.value : null;
     } catch (error) {
       console.error("camera_value 조회 실패:", error);
       return null;

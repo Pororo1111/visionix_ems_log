@@ -6,32 +6,30 @@ import dotenv from "dotenv";
 dotenv.config();
 
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL || "postgresql://username:password@localhost:5432/visionx_ems",
+  connectionString: process.env.DATABASE_URL,
 });
 
 export const db = drizzle(pool, { schema });
 
 export async function testConnection() {
   try {
-    const client = await pool.connect();
-    console.log("✅ DB 연결 성공");
-    
-    // 간단한 쿼리로 연결 테스트
-    await client.query('SELECT 1');
-    client.release();
+    console.log("🔗 데이터베이스 연결 테스트 중...");
+    const result = await db.execute(`SELECT 1 as test`);
+    console.log("✅ 데이터베이스 연결 성공");
+    return true;
   } catch (error) {
-    console.error("❌ DB 연결 실패:", error);
+    console.error("❌ 데이터베이스 연결 실패:", error);
     throw error;
   }
 }
 
 export async function closeConnection() {
   try {
+    console.log("🔐 데이터베이스 연결 종료 중...");
     await pool.end();
-    console.log("✅ DB 연결 종료");
+    console.log("✅ 데이터베이스 연결 종료 완료");
   } catch (error) {
-    console.error("❌ DB 연결 종료 실패:", error);
+    console.error("❌ 데이터베이스 연결 종료 실패:", error);
+    throw error;
   }
 }
-
-export { schema };

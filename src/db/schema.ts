@@ -21,10 +21,30 @@ export const dashboardSummary = pgTable("dashboard_summary", {
   lastUpdated: timestamp("last_updated", { withTimezone: true }).defaultNow().notNull(),
 });
 
+// 장비 에러 로그 테이블 (TimescaleDB hypertable)
+export const deviceErrorLogs = pgTable("device_error_logs", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  deviceIp: text("device_ip").notNull(), // 장비 IP 주소 (Prometheus instance)
+  errorCode: integer("error_code").notNull().references(() => errorCodes.code), // 에러 코드 (FK)
+  errorMessage: text("error_message").notNull(), // 에러 메시지
+  occurredAt: timestamp("occurred_at", { withTimezone: true }).defaultNow().notNull(), // 최초 발생 시간
+  lastOccurredAt: timestamp("last_occurred_at", { withTimezone: true }).defaultNow().notNull(), // 최종 발생 시간
+  isRead: boolean("is_read").default(false).notNull(), // 읽음 처리 여부
+  readAt: timestamp("read_at", { withTimezone: true }), // 읽음 처리 시간
+});
+
 // Relations
+export const deviceErrorLogsRelations = relations(deviceErrorLogs, ({ one }) => ({
+  errorCode: one(errorCodes, {
+    fields: [deviceErrorLogs.errorCode],
+    references: [errorCodes.code],
+  }),
+}));
 
 // Types
 export type ErrorCode = typeof errorCodes.$inferSelect;
 export type NewErrorCode = typeof errorCodes.$inferInsert;
 export type DashboardSummary = typeof dashboardSummary.$inferSelect;
 export type NewDashboardSummary = typeof dashboardSummary.$inferInsert;
+export type DeviceErrorLog = typeof deviceErrorLogs.$inferSelect;
+export type NewDeviceErrorLog = typeof deviceErrorLogs.$inferInsert;

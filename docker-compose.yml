@@ -1,0 +1,32 @@
+version: '3.8'
+
+services:
+  timescaledb:
+    image: timescale/timescaledb:latest-pg17
+    container_name: visionx-ems-timescaledb
+    restart: unless-stopped
+    ports:
+      - "5433:5432"  # 웹서버 DB와 충돌 방지를 위해 5433 포트 사용
+    environment:
+      POSTGRES_DB: visionx_ems_log
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      TIMESCALEDB_TELEMETRY: "off"
+    volumes:
+      - timescale_data:/var/lib/postgresql/data
+      - ./init-scripts:/docker-entrypoint-initdb.d/
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d visionx_ems_log"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - visionx-network
+
+networks:
+  visionx-network:
+    driver: bridge
+
+volumes:
+  timescale_data:
+    driver: local
