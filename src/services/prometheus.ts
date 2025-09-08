@@ -123,8 +123,8 @@ export class PrometheusService {
 
   // instance 라벨을 device_name으로 매핑하는 헬퍼 메서드
   private mapInstanceToDeviceName(instance: string): string {
-    // instance 형태: localhost:5000, 192.168.1.100:8080 등
-    if (instance.includes('localhost:5000') || instance.includes('5000')) {
+    // instance 형태: localhost:5000, 192.168.0.34:5000 등
+    if (instance.includes('192.168.0.34:5000') || instance.includes('localhost:5000') || instance.includes('5000')) {
       return 'flask-device-5000';
     }
     if (instance.includes('localhost:8080') || instance.includes('8080')) {
