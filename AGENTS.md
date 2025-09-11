@@ -1,5 +1,6 @@
 항상 한국어로 답하세요.
 Raw SQL 사용 금지.
+앞으로는 PowerShell 명령에 -NoProfile 옵션을 사용하지 않습니다.
 
 **프로젝트명:** 로그 서버 구축 (Prometheus → PostgreSQL 저장)
 
