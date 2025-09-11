@@ -1,0 +1,268 @@
+{
+  "id": "2d5e6140-44cd-4f1e-b74e-15fa2c9858f4",
+  "prevId": "66a06592-2ecd-4125-b060-42daed411a58",
+  "version": "7",
+  "dialect": "postgresql",
+  "tables": {
+    "public.dashboard_summary": {
+      "name": "dashboard_summary",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "default": 1
+        },
+        "total_devices": {
+          "name": "total_devices",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "active_devices": {
+          "name": "active_devices",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "inactive_devices": {
+          "name": "inactive_devices",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "normal_camera_status": {
+          "name": "normal_camera_status",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "abnormal_camera_status": {
+          "name": "abnormal_camera_status",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "avg_cpu_usage": {
+          "name": "avg_cpu_usage",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "avg_memory_usage": {
+          "name": "avg_memory_usage",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_updated": {
+          "name": "last_updated",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.device_error_logs": {
+      "name": "device_error_logs",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "bigserial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "device_ip": {
+          "name": "device_ip",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "error_code": {
+          "name": "error_code",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "error_message": {
+          "name": "error_message",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "occurred_at": {
+          "name": "occurred_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "last_occurred_at": {
+          "name": "last_occurred_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "is_read": {
+          "name": "is_read",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "read_at": {
+          "name": "read_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "device_error_logs_error_code_error_codes_code_fk": {
+          "name": "device_error_logs_error_code_error_codes_code_fk",
+          "tableFrom": "device_error_logs",
+          "tableTo": "error_codes",
+          "columnsFrom": [
+            "error_code"
+          ],
+          "columnsTo": [
+            "code"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.device_infos": {
+      "name": "device_infos",
+      "schema": "",
+      "columns": {
+        "device_ip": {
+          "name": "device_ip",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "instance": {
+          "name": "instance",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "is_online": {
+          "name": "is_online",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "camera_value": {
+          "name": "camera_value",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "cpu_usage": {
+          "name": "cpu_usage",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "memory_usage": {
+          "name": "memory_usage",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_scraped": {
+          "name": "last_scraped",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.error_codes": {
+      "name": "error_codes",
+      "schema": "",
+      "columns": {
+        "code": {
+          "name": "code",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    }
+  },
+  "enums": {},
+  "schemas": {},
+  "sequences": {},
+  "roles": {},
+  "policies": {},
+  "views": {},
+  "_meta": {
+    "columns": {},
+    "schemas": {},
+    "tables": {}
+  }
+}

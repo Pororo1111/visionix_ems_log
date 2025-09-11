@@ -2,21 +2,99 @@ import express, { Express, Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import { db } from '../db/index';
-import { dashboardSummary } from '../db/schema';
+import { dashboardSummary, deviceInfos } from '../db/schema';
 import { dashboardService } from '../services/dashboard';
-import { sql } from 'drizzle-orm';
+import { DeviceService } from '../services/device';
+import { sql, inArray } from 'drizzle-orm';
 
 const app: Express = express();
 const PORT = Number(process.env.PORT) || 3001;
+const deviceService = new DeviceService();
 
 // 미들웨어 설정
 app.use(helmet());
 app.use(cors());
 app.use(express.json());
 
+// 마이그레이션으로 테이블을 준비하는 것을 권장합니다.
+
 // 헬스 체크 엔드포인트
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+// 디바이스 IP 목록 상태 조회 API
+// body: { ips: string[], port?: number, store?: boolean }
+app.post('/api/devices/status', async (req, res) => {
+  try {
+    const ips: string[] = Array.isArray(req.body?.ips) ? req.body.ips : [];
+    const port: number | undefined = req.body?.port ? Number(req.body.port) : undefined;
+    const store: boolean = req.body?.store !== false; // 기본 저장
+
+    if (!ips || ips.length === 0) {
+      return res.status(400).json({
+        error: 'ip 목록이 비어있습니다',
+        message: 'Provide body { ips: string[] }',
+      });
+    }
+
+    const statuses = store
+      ? await deviceService.getAndStoreStatuses(ips, port)
+      : await deviceService.fetchCameraValuesByIps(ips, port);
+
+    res.json({
+      success: true,
+      data: statuses,
+      count: statuses.length,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error('디바이스 상태 조회 API 실패:', error);
+    res.status(500).json({
+      error: '서버 오류가 발생했습니다',
+      message: 'Internal server error',
+    });
+  }
+});
+
+// 저장된 디바이스 상태 조회 (DB 기반)
+// query: /api/devices/saved?ips=ip1,ip2
+app.get('/api/devices/saved', async (req, res) => {
+  try {
+    const ipsParam = req.query.ips;
+    let ips: string[] = [];
+
+    if (Array.isArray(ipsParam)) {
+      ips = (ipsParam as string[]).flatMap((s) => s.split(',')).map((s) => s.trim()).filter(Boolean);
+    } else if (typeof ipsParam === 'string') {
+      ips = ipsParam.split(',').map((s) => s.trim()).filter(Boolean);
+    }
+
+    if (!ips || ips.length === 0) {
+      return res.status(400).json({
+        error: 'ips 쿼리스트링이 비어있습니다',
+        message: 'Use /api/devices/saved?ips=ip1,ip2',
+      });
+    }
+
+    const rows = await db
+      .select()
+      .from(deviceInfos)
+      .where(inArray(deviceInfos.deviceIp, ips));
+
+    res.json({
+      success: true,
+      data: rows,
+      count: rows.length,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error('저장된 디바이스 조회 API 실패:', error);
+    res.status(500).json({
+      error: '서버 오류가 발생했습니다',
+      message: 'Internal server error',
+    });
+  }
 });
 
 // 대시보드 요약정보 API

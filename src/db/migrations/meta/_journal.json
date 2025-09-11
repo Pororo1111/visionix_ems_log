@@ -8,6 +8,13 @@
       "when": 1757251803381,
       "tag": "0000_empty_stranger",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1757588649042,
+      "tag": "0001_stormy_cloak",
+      "breakpoints": true
     }
   ]
 }

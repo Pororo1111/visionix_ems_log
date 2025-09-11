@@ -1,6 +1,7 @@
 import { testConnection, closeConnection } from "./db";
 import { startServer } from "./server";
 import { DashboardService } from "./services/dashboard";
+import { DeviceService } from "./services/device";
 import { seedDatabase } from "./db/seed";
 
 async function main() {
@@ -18,6 +19,8 @@ async function main() {
 
     // 4. 대시보드 서비스 초기화 및 주기적 업데이트 시작
     const dashboardService = new DashboardService();
+    const deviceService = new DeviceService();
+    const intervalMs = Number(process.env.COLLECTION_INTERVAL || 5000);
     
     // 초기 업데이트 실행
     console.log("📊 초기 대시보드 요약정보 업데이트 실행...");
@@ -27,7 +30,10 @@ async function main() {
     const updateInterval = setInterval(async () => {
       await dashboardService.updateDashboardSummary();
     }, 5000);
-    
+
+    // 디바이스 IP 기반 주기 수집 (DEVICE_IPS 사용)
+    const deviceInterval = deviceService.startAutoDiscoveryCollection(intervalMs);
+
     console.log("📊 대시보드 요약정보 주기적 업데이트 시작 (5초 간격)");
 
     const gracefulShutdown = async () => {
@@ -35,6 +41,9 @@ async function main() {
       
       // 주기적 업데이트 중지
       clearInterval(updateInterval);
+      if (typeof deviceInterval !== 'undefined' && deviceInterval) {
+        clearInterval(deviceInterval);
+      }
       
       // HTTP 서버 종료
       server.close();

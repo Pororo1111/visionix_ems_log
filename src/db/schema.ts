@@ -33,6 +33,18 @@ export const deviceErrorLogs = pgTable("device_error_logs", {
   readAt: timestamp("read_at", { withTimezone: true }), // 읽음 처리 시간
 });
 
+// 디바이스 실시간 정보 테이블 (디바이스별 최신 상태 저장)
+export const deviceInfos = pgTable("device_infos", {
+  deviceIp: text("device_ip").primaryKey(),
+  instance: text("instance").notNull(),
+  isOnline: boolean("is_online").notNull().default(false),
+  cameraValue: integer("camera_value"),
+  cpuUsage: real("cpu_usage"),
+  memoryUsage: real("memory_usage"),
+  lastScraped: timestamp("last_scraped", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
 // Relations
 export const deviceErrorLogsRelations = relations(deviceErrorLogs, ({ one }) => ({
   errorCode: one(errorCodes, {
@@ -48,3 +60,5 @@ export type DashboardSummary = typeof dashboardSummary.$inferSelect;
 export type NewDashboardSummary = typeof dashboardSummary.$inferInsert;
 export type DeviceErrorLog = typeof deviceErrorLogs.$inferSelect;
 export type NewDeviceErrorLog = typeof deviceErrorLogs.$inferInsert;
+export type DeviceInfo = typeof deviceInfos.$inferSelect;
+export type NewDeviceInfo = typeof deviceInfos.$inferInsert;
