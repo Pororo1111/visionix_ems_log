@@ -26,6 +26,11 @@ interface DeviceMetricData {
   temperature?: number;
 }
 
+export interface InstanceMetricSnapshot {
+  value: number | null;
+  timestamp: Date | null;
+}
+
 export class PrometheusService {
   private baseUrl: string;
 
@@ -67,6 +72,62 @@ export class PrometheusService {
     }
 
     return parsed;
+  }
+
+  private escapePrometheusRegex(value: string): string {
+    return value.replace(/[-\/\\^$*+?.()|[\]{}]/g, "\\$&");
+  }
+
+  private buildInstanceRegex(instances: string[]): string | null {
+    const trimmed = instances.map((instance) => instance.trim()).filter(Boolean);
+    if (trimmed.length === 0) {
+      return null;
+    }
+
+    const anchored = trimmed.map((instance) => `^${this.escapePrometheusRegex(instance)}$`);
+    const pattern = anchored.join("|");
+
+    return pattern.replace(/\\/g, "\\\\");
+  }
+
+  async fetchMetricsForInstances(instances: string[], metricNames: string[]): Promise<Map<string, Map<string, InstanceMetricSnapshot>>> {
+    const result = new Map<string, Map<string, InstanceMetricSnapshot>>();
+
+    if (!Array.isArray(instances) || instances.length === 0) {
+      return result;
+    }
+
+    if (!Array.isArray(metricNames) || metricNames.length === 0) {
+      return result;
+    }
+
+    const instanceRegex = this.buildInstanceRegex(instances);
+
+    const metricQueries = metricNames.map(async (metricName) => {
+      const promQuery = instanceRegex
+        ? `${metricName}{instance=~\"${instanceRegex}\"}`
+        : metricName;
+
+      const samples = await this.queryMetric(promQuery);
+
+      for (const sample of samples) {
+        const instance = sample.metric.instance || "unknown";
+        const parsedValue = this.parseSampleValue(sample);
+        const timestampSeconds = sample.value?.[0];
+        const snapshot: InstanceMetricSnapshot = {
+          value: parsedValue,
+          timestamp: typeof timestampSeconds === "number" ? new Date(timestampSeconds * 1000) : null,
+        };
+
+        const entry = result.get(instance) ?? new Map<string, InstanceMetricSnapshot>();
+        entry.set(metricName, snapshot);
+        result.set(instance, entry);
+      }
+    });
+
+    await Promise.all(metricQueries);
+
+    return result;
   }
 
   async getCameraStatusSummary(): Promise<{
@@ -145,16 +206,12 @@ export class PrometheusService {
 
   // instance 라벨을 device_name으로 매핑하는 헬퍼 메서드
   private mapInstanceToDeviceName(instance: string): string {
-    // instance 형태: localhost:5000, 192.168.0.34:5000 등
-    if (instance.includes('192.168.0.34:5000') || instance.includes('localhost:5000') || instance.includes('5000')) {
-      return 'flask-device-5000';
+    if (!instance) {
+      return 'unknown-instance';
     }
-    if (instance.includes('localhost:8080') || instance.includes('8080')) {
-      return 'flask-device-8080';
-    }
-    
-    // 기본적으로 instance 자체를 device_name으로 사용
-    return instance.replace(':', '-').replace('.', '-');
+
+    const sanitized = instance.trim();
+    return sanitized.replace(/[:.]/g, '-');
   }
 
   // 장비들의 CPU 사용률 조회 (job="devices" 필터 적용)
@@ -229,3 +286,4 @@ export class PrometheusService {
     }
   }
 }
+

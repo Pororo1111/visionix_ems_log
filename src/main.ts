@@ -2,6 +2,7 @@ import { testConnection, closeConnection } from "./db";
 import { startServer } from "./server";
 import { DashboardService } from "./services/dashboard";
 import { DeviceService } from "./services/device";
+import { DeviceMetricLogIngestor } from "./services/logIngestor";
 import { seedDatabase } from "./db/seed";
 
 async function main() {
@@ -20,27 +21,41 @@ async function main() {
     // 4. 대시보드 서비스 초기화 및 주기적 업데이트 시작
     const dashboardService = new DashboardService();
     const deviceService = new DeviceService();
+    const metricLogIngestor = new DeviceMetricLogIngestor();
     const intervalMs = Number(process.env.COLLECTION_INTERVAL || 5000);
     
     // 초기 업데이트 실행
     console.log("📊 초기 대시보드 요약정보 업데이트 실행...");
     await dashboardService.updateDashboardSummary();
+
+    console.log("📝 초기 장비 메트릭 로그 수집 실행...");
+    await metricLogIngestor.collect().catch((error) => {
+      console.error("📝 초기 메트릭 로그 수집 실패:", error);
+    });
     
     // 5초마다 주기적 업데이트
     const updateInterval = setInterval(async () => {
       await dashboardService.updateDashboardSummary();
     }, 5000);
 
+    const logCollectInterval = setInterval(() => {
+      metricLogIngestor.collect().catch((error) => {
+        console.error("📝 주기적 메트릭 로그 수집 실패:", error);
+      });
+    }, intervalMs);
+
     // 디바이스 IP 기반 주기 수집 (DEVICE_IPS 사용)
     const deviceInterval = deviceService.startAutoDiscoveryCollection(intervalMs);
 
     console.log("📊 대시보드 요약정보 주기적 업데이트 시작 (5초 간격)");
+    console.log(`📝 메트릭 로그 수집 주기 시작 (${intervalMs}ms 간격)`);
 
     const gracefulShutdown = async () => {
       console.log("\n🛑 종료 신호 수신...");
       
       // 주기적 업데이트 중지
       clearInterval(updateInterval);
+      clearInterval(logCollectInterval);
       if (typeof deviceInterval !== 'undefined' && deviceInterval) {
         clearInterval(deviceInterval);
       }

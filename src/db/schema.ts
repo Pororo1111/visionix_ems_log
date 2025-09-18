@@ -1,4 +1,4 @@
-import { pgTable, integer, text, timestamp, bigserial, real, boolean } from "drizzle-orm/pg-core";
+import { pgTable, integer, text, timestamp, bigserial, real, boolean, index } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 
 export const errorCodes = pgTable("error_codes", {
@@ -45,6 +45,23 @@ export const deviceInfos = pgTable("device_infos", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
+// 디바이스 메트릭 로그 테이블 (정기 스냅샷 저장)
+export const deviceMetricLogs = pgTable("device_metric_logs", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  deviceIp: text("device_ip").notNull(),
+  instance: text("instance").notNull(),
+  metricName: text("metric_name").notNull(),
+  metricValue: real("metric_value"),
+  scrapedAt: timestamp("scraped_at", { withTimezone: true }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  deviceMetricTimeIdx: index("device_metric_logs_device_metric_time_idx").on(
+    table.deviceIp,
+    table.metricName,
+    table.scrapedAt,
+  ),
+}));
+
 // Relations
 export const deviceErrorLogsRelations = relations(deviceErrorLogs, ({ one }) => ({
   errorCode: one(errorCodes, {
@@ -62,3 +79,5 @@ export type DeviceErrorLog = typeof deviceErrorLogs.$inferSelect;
 export type NewDeviceErrorLog = typeof deviceErrorLogs.$inferInsert;
 export type DeviceInfo = typeof deviceInfos.$inferSelect;
 export type NewDeviceInfo = typeof deviceInfos.$inferInsert;
+export type DeviceMetricLog = typeof deviceMetricLogs.$inferSelect;
+export type NewDeviceMetricLog = typeof deviceMetricLogs.$inferInsert;
