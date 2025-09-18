@@ -30,33 +30,25 @@ export class DashboardService {
     try {
       console.log("📊 대시보드 요약 데이터 업데이트 시작...");
 
-      // 1. Prometheus에서 camera_value와 instance 조회
-      const cameraResult = await this.prometheus.getCameraValue();
-      let normalCount = 0;
-      let abnormalCount = 0;
-      
-      if (cameraResult !== null) {
-        const { value: cameraValue, instance } = cameraResult;
-        
-        if (cameraValue === 0) {
-          normalCount = 1;
-          abnormalCount = 0;
-        } else {
-          normalCount = 0;
-          abnormalCount = 1;
-          
-          // 에러 상태일 때마다 UPSERT로 최종 발생 시간 업데이트
-          await this.logDeviceErrorWithIp(instance, cameraValue);
-        }
-        
-        // 에러 상태별 메시지
-        const statusMessage = this.getStatusMessage(cameraValue);
-        console.log(`📊 현재 camera_value: ${cameraValue} (${statusMessage}) - instance: ${instance}`);
-      } else {
+      // 1. Prometheus에서 camera_value 전체 시계열을 조회해 상태 집계
+      const {
+        normalCount,
+        abnormalCount,
+        abnormalDevices,
+      } = await this.prometheus.getCameraStatusSummary();
+
+      if (normalCount + abnormalCount === 0) {
         console.warn("⚠️ camera_value 메트릭을 찾을 수 없어 상태 집계를 0으로 설정");
-        // camera_value가 null이면 정상/비정상 모두 0으로 설정
-        normalCount = 0;
-        abnormalCount = 0;
+      }
+
+      for (const device of abnormalDevices) {
+        const statusMessage = this.getStatusMessage(device.value);
+        console.log(
+          `🚨 비정상 camera_value 감지 - instance: ${device.instance}, value: ${device.value} (${statusMessage})`
+        );
+
+        // 에러 상태일 때마다 UPSERT로 최종 발생 시간 업데이트
+        await this.logDeviceErrorWithIp(device.instance, device.value);
       }
 
       // 2. Prometheus에서 장비 상태 조회 (up 메트릭)

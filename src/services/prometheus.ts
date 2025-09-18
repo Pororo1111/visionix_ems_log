@@ -9,12 +9,14 @@ interface PrometheusQueryResult {
   status: string;
   data: {
     resultType: string;
-    result: Array<{
-      metric: Record<string, string>;
-      value: [number, string];
-    }>;
+    result: PrometheusVectorSample[];
   };
 }
+
+type PrometheusVectorSample = {
+  metric: Record<string, string>;
+  value: [number, string];
+};
 
 interface DeviceMetricData {
   deviceName: string;
@@ -31,7 +33,7 @@ export class PrometheusService {
     this.baseUrl = baseUrl || PROMETHEUS_BASE_URL;
   }
 
-  async queryMetric(metric: string): Promise<any> {
+  async queryMetric(metric: string): Promise<PrometheusVectorSample[]> {
     try {
       const response: AxiosResponse<PrometheusQueryResult> = await axios.get(
         `${this.baseUrl}/api/v1/query`,
@@ -53,36 +55,56 @@ export class PrometheusService {
     }
   }
 
-  async getCameraValue(): Promise<{ value: number; instance: string } | null> {
-    try {
-      const result = await this.queryMetric("camera_value");
-      
-      if (result.length === 0) {
-        console.warn("camera_value 메트릭을 찾을 수 없습니다");
-        return null;
-      }
-
-      const value = parseInt(result[0].value[1]);
-      const instance = result[0].metric.instance || 'unknown';
-      
-      return { value, instance };
-    } catch (error) {
-      console.error("camera_value 조회 실패:", error);
+  private parseSampleValue(sample: PrometheusVectorSample): number | null {
+    const rawValue = sample?.value?.[1];
+    if (typeof rawValue !== "string") {
       return null;
     }
-  }
 
-  // 기존 호환성을 위한 메서드 (deprecated)
-  async getCameraValueOnly(): Promise<number | null> {
-    try {
-      const result = await this.getCameraValue();
-      return result ? result.value : null;
-    } catch (error) {
-      console.error("camera_value 조회 실패:", error);
+    const parsed = Number(rawValue);
+    if (!Number.isFinite(parsed)) {
       return null;
     }
+
+    return parsed;
   }
 
+  async getCameraStatusSummary(): Promise<{
+    normalCount: number;
+    abnormalCount: number;
+    abnormalDevices: Array<{ instance: string; value: number }>;
+  }> {
+    try {
+      const series = await this.queryMetric("camera_value");
+
+      return series.reduce(
+        (acc, sample) => {
+          const value = this.parseSampleValue(sample);
+          if (value === null) {
+            return acc;
+          }
+
+          const instance = sample.metric.instance || "unknown";
+          if (value === 0) {
+            acc.normalCount += 1;
+          } else {
+            acc.abnormalCount += 1;
+            acc.abnormalDevices.push({ instance, value });
+          }
+
+          return acc;
+        },
+        {
+          normalCount: 0,
+          abnormalCount: 0,
+          abnormalDevices: [] as Array<{ instance: string; value: number }>,
+        }
+      );
+    } catch (error) {
+      console.error("camera_value 상태 집계 실패:", error);
+      return { normalCount: 0, abnormalCount: 0, abnormalDevices: [] };
+    }
+  }
 
   // Prometheus up{job="devices"} 메트릭으로 장비 상태 확인 (웹서버와 동일한 쿼리)
   async getDeviceOnlineStatusFromUp(): Promise<DeviceMetricData[]> {
