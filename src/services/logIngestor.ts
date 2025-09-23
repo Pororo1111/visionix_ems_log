@@ -2,7 +2,13 @@ import { db } from "../db";
 import { deviceMetricLogs, NewDeviceMetricLog } from "../db/schema";
 import { PrometheusService, InstanceMetricSnapshot } from "./prometheus";
 
-const DEFAULT_METRIC_LIST = ["camera_value"];
+const DEFAULT_METRIC_LIST = [
+  "camera_value",
+  "ocr_value_seconds",
+  "hdmi_value",
+  "ac_value",
+  "dc_value",
+];
 
 export class DeviceMetricLogIngestor {
   private prometheus: PrometheusService;
@@ -45,18 +51,28 @@ export class DeviceMetricLogIngestor {
     for (const [instance, metricMap] of metrics.entries()) {
       const deviceIp = this.parseDeviceIp(instance);
 
-      for (const metricName of this.metricNames) {
-        const snapshot = metricMap.get(metricName);
-        if (!snapshot) continue;
+      const cam = metricMap.get("camera_value");
+      const ocr = metricMap.get("ocr_value_seconds");
+      const hdmi = metricMap.get("hdmi_value");
+      const ac = metricMap.get("ac_value");
+      const dc = metricMap.get("dc_value");
 
-        rows.push({
-          deviceIp,
-          instance,
-          metricName,
-          metricValue: snapshot.value,
-          scrapedAt: snapshot.timestamp ?? new Date(),
-        });
-      }
+      const timestamps = [cam?.timestamp, ocr?.timestamp, hdmi?.timestamp, ac?.timestamp, dc?.timestamp]
+        .filter((d): d is Date => !!d);
+      const scrapedAt = timestamps.length > 0 ? new Date(Math.max(...timestamps.map((d) => d.getTime()))) : new Date();
+
+      const row: NewDeviceMetricLog = {
+        deviceIp,
+        instance,
+        cameraValue: (cam?.value as number) ?? null,
+        ocrValueSeconds: (ocr?.value as number) ?? null,
+        hdmiValue: (hdmi?.value as number) ?? null,
+        acValue: (ac?.value as number) ?? null,
+        dcValue: (dc?.value as number) ?? null,
+        scrapedAt,
+      } as NewDeviceMetricLog;
+
+      rows.push(row);
     }
 
     return rows;

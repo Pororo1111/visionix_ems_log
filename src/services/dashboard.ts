@@ -1,7 +1,7 @@
 import { db } from "../db/index";
 import { dashboardSummary, deviceErrorLogs } from "../db/schema";
 import { PrometheusService } from "./prometheus";
-import { sql } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 
 export class DashboardService {
   private prometheus: PrometheusService;
@@ -42,7 +42,7 @@ export class DashboardService {
       }
 
       for (const device of abnormalDevices) {
-        const statusMessage = this.getStatusMessage(device.value);
+        const statusMessage = this.getErrorMessage('camera', device.value);
         console.log(
           `🚨 비정상 camera_value 감지 - instance: ${device.instance}, value: ${device.value} (${statusMessage})`
         );
@@ -58,9 +58,12 @@ export class DashboardService {
       const inactiveDevices = deviceStats.filter(d => !d.isOnline).length;
 
       // 3. Prometheus에서 CPU, 메모리 사용률 조회
-      const [cpuUsageData, memoryUsageData] = await Promise.all([
+      const [cpuUsageData, memoryUsageData, hdmiMap, acMap, dcMap] = await Promise.all([
         this.prometheus.getDeviceCpuUsage(),
-        this.prometheus.getDeviceMemoryUsage()
+        this.prometheus.getDeviceMemoryUsage(),
+        this.fetchMetricMap('hdmi_value'),
+        this.fetchMetricMap('ac_value'),
+        this.fetchMetricMap('dc_value'),
       ]);
 
       // CPU/메모리 평균값 계산
@@ -75,44 +78,84 @@ export class DashboardService {
         ? memoryValues.reduce((sum, val) => sum + val, 0) / memoryValues.length 
         : 0;
 
+      // hdmi/ac/dc 정상/비정상 집계 (OCR 제외)
+      let normalHdmiStatus = 0;
+      let abnormalHdmiStatus = 0;
+      for (const v of hdmiMap.values()) {
+        if (v === 0) normalHdmiStatus++; else abnormalHdmiStatus++;
+      }
+      let normalAcStatus = 0;
+      let abnormalAcStatus = 0;
+      for (const v of acMap.values()) {
+        if (v === 0) normalAcStatus++; else abnormalAcStatus++;
+      }
+      let normalDcStatus = 0;
+      let abnormalDcStatus = 0;
+      for (const v of dcMap.values()) {
+        if (v === 0) normalDcStatus++; else abnormalDcStatus++;
+      }
+
       // 4. dashboard_summary 테이블 업데이트 (UPSERT)
-      await db.execute(sql`
-        INSERT INTO dashboard_summary (
-          id, 
-          total_devices, 
-          active_devices, 
-          inactive_devices, 
-          normal_camera_status, 
-          abnormal_camera_status, 
-          avg_cpu_usage, 
-          avg_memory_usage, 
-          last_updated
-        ) VALUES (
-          1, 
-          ${totalDevices}, 
-          ${activeDevices}, 
-          ${inactiveDevices}, 
-          ${normalCount}, 
-          ${abnormalCount}, 
-          ${avgCpuUsage}, 
-          ${avgMemoryUsage}, 
-          NOW()
-        )
-        ON CONFLICT (id) DO UPDATE SET
-          total_devices = EXCLUDED.total_devices,
-          active_devices = EXCLUDED.active_devices,
-          inactive_devices = EXCLUDED.inactive_devices,
-          normal_camera_status = EXCLUDED.normal_camera_status,
-          abnormal_camera_status = EXCLUDED.abnormal_camera_status,
-          avg_cpu_usage = EXCLUDED.avg_cpu_usage,
-          avg_memory_usage = EXCLUDED.avg_memory_usage,
-          last_updated = EXCLUDED.last_updated
-      `);
+      await db
+        .insert(dashboardSummary)
+        .values({
+          id: 1,
+          totalDevices,
+          activeDevices,
+          inactiveDevices,
+          normalCameraStatus: normalCount,
+          abnormalCameraStatus: abnormalCount,
+          normalHdmiStatus,
+          abnormalHdmiStatus,
+          normalAcStatus,
+          abnormalAcStatus,
+          normalDcStatus,
+          abnormalDcStatus,
+          avgCpuUsage,
+          avgMemoryUsage,
+          lastUpdated: new Date(),
+        })
+        .onConflictDoUpdate({
+          target: [dashboardSummary.id],
+          set: {
+            totalDevices,
+            activeDevices,
+            inactiveDevices,
+            normalCameraStatus: normalCount,
+            abnormalCameraStatus: abnormalCount,
+            normalHdmiStatus,
+            abnormalHdmiStatus,
+            normalAcStatus,
+            abnormalAcStatus,
+            normalDcStatus,
+            abnormalDcStatus,
+            avgCpuUsage,
+            avgMemoryUsage,
+            lastUpdated: new Date(),
+          },
+        });
 
       console.log("✅ 대시보드 요약 데이터 업데이트 완료");
       console.log(`   - 총 장비: ${totalDevices}개 (활성: ${activeDevices}, 비활성: ${inactiveDevices})`);
       console.log(`   - 정상 상태: ${normalCount}, 비정상 상태: ${abnormalCount}`);
       console.log(`   - 평균 CPU: ${avgCpuUsage.toFixed(1)}%, 평균 메모리: ${avgMemoryUsage.toFixed(1)}%`);
+
+      // 5. hdmi/ac/dc 비정상 감지 시 device_error_logs 업데이트
+      for (const [instance, value] of hdmiMap.entries()) {
+        if (value !== 0) {
+          await this.upsertDeviceError(instance, 'hdmi', value, { hdmiValue: value });
+        }
+      }
+      for (const [instance, value] of acMap.entries()) {
+        if (value === 1) {
+          await this.upsertDeviceError(instance, 'ac', value, { acValue: value });
+        }
+      }
+      for (const [instance, value] of dcMap.entries()) {
+        if (value === 1) {
+          await this.upsertDeviceError(instance, 'dc', value, { dcValue: value });
+        }
+      }
 
     } catch (error) {
       console.error("❌ 대시보드 요약 데이터 업데이트 실패:", error);
@@ -120,18 +163,50 @@ export class DashboardService {
   }
 
   /**
-   * camera_value 코드에 따른 상태 메시지 반환
+   * 카테고리별 에러 코드 메시지 매핑
    */
-  private getStatusMessage(cameraValue: number): string {
-    const statusMap: Record<number, string> = {
-      0: '정상',
-      1: '시계멈춤', 
-      2: '신호없음',
-      3: '패널손상',
-      4: '기타 이상감지'
+  private getErrorMessage(category: 'camera' | 'hdmi' | 'ac' | 'dc', code: number): string {
+    const maps: Record<string, Record<number, string>> = {
+      camera: {
+        0: '정상',
+        1: '시계멈춤',
+        2: '신호없음',
+        3: '패널손상',
+        4: '기타 이상감지',
+      },
+      hdmi: {
+        0: '정상',
+        1: '시계멈춤',
+        2: '신호없음',
+        3: '기타 이상현상',
+      },
+      ac: {
+        0: '정상',
+        1: '비정상',
+      },
+      dc: {
+        0: '정상',
+        1: '비정상',
+      },
     };
-    
-    return statusMap[cameraValue] || `알 수 없는 상태 (${cameraValue})`;
+
+    const map = maps[category] || {};
+    return map[code] || `알 수 없는 상태 (${code})`;
+  }
+
+  /** Prometheus에서 단일 메트릭을 조회하여 instance->value 매핑으로 반환 */
+  private async fetchMetricMap(metricName: string): Promise<Map<string, number>> {
+    const samples = await this.prometheus.queryMetric(`${metricName}`);
+    const map = new Map<string, number>();
+    for (const s of samples) {
+      const instance = s.metric.instance || 'unknown';
+      const raw = s?.value?.[1];
+      const parsed = raw !== undefined ? Number(raw) : NaN;
+      if (Number.isFinite(parsed)) {
+        map.set(instance, parsed);
+      }
+    }
+    return map;
   }
 
 
@@ -140,14 +215,15 @@ export class DashboardService {
    */
   private async logDeviceErrorWithIp(deviceIp: string, errorCode: number): Promise<void> {
     try {
-      const errorMessage = this.getStatusMessage(errorCode);
+      const errorMessage = this.getErrorMessage('camera', errorCode);
       const currentTime = new Date();
+      const category = "camera" as const;
       
       // 기존 레코드 찾기
       const existingLog = await db
         .select()
         .from(deviceErrorLogs)
-        .where(sql`device_ip = ${deviceIp}`)
+        .where(and(eq(deviceErrorLogs.deviceIp, deviceIp), eq(deviceErrorLogs.errorCategory, category)))
         .limit(1);
 
       if (existingLog.length > 0) {
@@ -158,26 +234,85 @@ export class DashboardService {
             errorCode,
             errorMessage,
             lastOccurredAt: currentTime,
-            isRead: false // 새로운 에러 발생으로 읽지 않음 상태로 변경
+            isRead: false, // 새로운 에러 발생으로 읽지 않음 상태로 변경
+            cameraValue: errorCode,
           })
-          .where(sql`device_ip = ${deviceIp}`);
+          .where(and(eq(deviceErrorLogs.deviceIp, deviceIp), eq(deviceErrorLogs.errorCategory, category)));
         
-        console.log(`🔄 에러 로그 업데이트 - IP: ${deviceIp}, 에러코드: ${errorCode} (${errorMessage})`);
       } else {
         // 새 레코드 생성
         await db.insert(deviceErrorLogs).values({
           deviceIp,
+          errorCategory: category,
           errorCode,
           errorMessage,
           occurredAt: currentTime,
           lastOccurredAt: currentTime,
-          isRead: false
+          isRead: false,
+          cameraValue: errorCode
         });
         
-        console.log(`🚨 에러 로그 신규 생성 - IP: ${deviceIp}, 에러코드: ${errorCode} (${errorMessage})`);
       }
     } catch (error) {
       console.error("❌ 에러 로그 UPSERT 실패:", error);
+    }
+  }
+
+  /** 범용 에러 로그 UPSERT (카테고리별) */
+  private async upsertDeviceError(
+    deviceIp: string,
+    category: 'camera' | 'hdmi' | 'ac' | 'dc',
+    code: number,
+    context?: {
+      cameraValue?: number;
+      ocrValueSeconds?: number;
+      hdmiValue?: number;
+      acValue?: number;
+      dcValue?: number;
+    }
+  ): Promise<void> {
+    const currentTime = new Date();
+    const errorMessage = this.getErrorMessage(category, code);
+    try {
+      const existing = await db
+        .select()
+        .from(deviceErrorLogs)
+        .where(and(eq(deviceErrorLogs.deviceIp, deviceIp), eq(deviceErrorLogs.errorCategory, category)))
+        .limit(1);
+
+      if (existing.length > 0) {
+        await db
+          .update(deviceErrorLogs)
+          .set({
+            errorCode: code,
+            errorMessage,
+            lastOccurredAt: currentTime,
+            isRead: false,
+            cameraValue: context?.cameraValue,
+            ocrValueSeconds: context?.ocrValueSeconds,
+            hdmiValue: context?.hdmiValue,
+            acValue: context?.acValue,
+            dcValue: context?.dcValue,
+          })
+          .where(and(eq(deviceErrorLogs.deviceIp, deviceIp), eq(deviceErrorLogs.errorCategory, category)));
+      } else {
+        await db.insert(deviceErrorLogs).values({
+          deviceIp,
+          errorCategory: category,
+          errorCode: code,
+          errorMessage,
+          occurredAt: currentTime,
+          lastOccurredAt: currentTime,
+          isRead: false,
+          cameraValue: context?.cameraValue,
+          ocrValueSeconds: context?.ocrValueSeconds,
+          hdmiValue: context?.hdmiValue,
+          acValue: context?.acValue,
+          dcValue: context?.dcValue,
+        });
+      }
+    } catch (error) {
+      console.error('❌ 범용 에러 로그 UPSERT 실패:', error);
     }
   }
 
@@ -190,8 +325,8 @@ export class DashboardService {
       const unreadLogs = await db
         .select()
         .from(deviceErrorLogs)
-        .where(sql`is_read = false`)
-        .orderBy(sql`occurred_at DESC`);
+        .where(eq(deviceErrorLogs.isRead, false))
+        .orderBy(desc(deviceErrorLogs.occurredAt));
       
       return unreadLogs;
     } catch (error) {
@@ -211,7 +346,7 @@ export class DashboardService {
           isRead: true, 
           readAt: new Date() 
         })
-        .where(sql`id = ${logId}`);
+        .where(eq(deviceErrorLogs.id, logId));
       
       console.log(`✅ 에러 로그 읽음 처리 완료 - ID: ${logId}`);
     } catch (error) {
@@ -231,7 +366,7 @@ export class DashboardService {
           isRead: true, 
           readAt: new Date() 
         })
-        .where(sql`is_read = false`);
+        .where(eq(deviceErrorLogs.isRead, false));
       
       console.log(`✅ 모든 에러 로그 읽음 처리 완료`);
     } catch (error) {

@@ -235,7 +235,7 @@ app.get('/api/logs', async (req: Request, res: Response) => {
     };
 
     const deviceIps = parseListParam(req.query.deviceIp);
-    const metricNames = parseListParam(req.query.metricName ?? req.query.metricNames);
+    // metricName 기반 저장을 제거했으므로 관련 필터 제외
     const instances = parseListParam(req.query.instance);
 
     const limitRaw = getFirstString(limitParam);
@@ -276,11 +276,7 @@ app.get('/api/logs', async (req: Request, res: Response) => {
       conditions.push(inArray(deviceMetricLogs.deviceIp, deviceIps));
     }
 
-    if (metricNames.length === 1) {
-      conditions.push(eq(deviceMetricLogs.metricName, metricNames[0]));
-    } else if (metricNames.length > 1) {
-      conditions.push(inArray(deviceMetricLogs.metricName, metricNames));
-    }
+    // metricName 필터 제거
 
     if (instances.length === 1) {
       conditions.push(eq(deviceMetricLogs.instance, instances[0]));

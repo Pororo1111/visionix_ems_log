@@ -14,7 +14,8 @@ export const db = drizzle(pool, { schema });
 export async function testConnection() {
   try {
     console.log("🔗 데이터베이스 연결 테스트 중...");
-    const result = await db.execute(`SELECT 1 as test`);
+    const client = await pool.connect();
+    client.release();
     console.log("✅ 데이터베이스 연결 성공");
     return true;
   } catch (error) {

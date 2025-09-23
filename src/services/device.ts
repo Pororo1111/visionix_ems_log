@@ -12,6 +12,10 @@ export interface DeviceSnapshot {
   instance: string;
   isOnline: boolean;
   cameraValue: number | null;
+  ocrValueSeconds: number | null;
+  hdmiValue: number | null;
+  acValue: number | null;
+  dcValue: number | null;
   cpuUsage: number | null;
   memoryUsage: number | null;
   statusMessage: string;
@@ -54,13 +58,21 @@ export class DeviceService {
     const promQlPattern = regexUnion.replace(/\\/g, "\\\\");
 
     const qCamera = `camera_value{instance=~\"${promQlPattern}\"}`;
+    const qOcr = `ocr_value_seconds{instance=~\"${promQlPattern}\"}`;
+    const qHdmi = `hdmi_value{instance=~\"${promQlPattern}\"}`;
+    const qAc = `ac_value{instance=~\"${promQlPattern}\"}`;
+    const qDc = `dc_value{instance=~\"${promQlPattern}\"}`;
     const qUp = `up{instance=~\"${promQlPattern}\"}`;
     const qCpu = `system_cpu_percent{instance=~\"${promQlPattern}\"}`;
     const qMem = `system_memory_percent{instance=~\"${promQlPattern}\"}`;
 
     try {
-      const [cameraRes, upRes, cpuRes, memRes] = await Promise.all([
+      const [cameraRes, ocrRes, hdmiRes, acRes, dcRes, upRes, cpuRes, memRes] = await Promise.all([
         this.prometheus.queryMetric(qCamera),
+        this.prometheus.queryMetric(qOcr),
+        this.prometheus.queryMetric(qHdmi),
+        this.prometheus.queryMetric(qAc),
+        this.prometheus.queryMetric(qDc),
         this.prometheus.queryMetric(qUp),
         this.prometheus.queryMetric(qCpu),
         this.prometheus.queryMetric(qMem),
@@ -73,6 +85,34 @@ export class DeviceService {
         const inst = r.metric.instance || "unknown";
         const val = Number.parseInt(r.value?.[1]);
         if (!Number.isNaN(val)) camByInst.set(inst, val);
+      }
+
+      const ocrByInst = new Map<string, number>();
+      for (const r of ocrRes) {
+        const inst = r.metric.instance || "unknown";
+        const val = Number.parseFloat(r.value?.[1]);
+        if (!Number.isNaN(val)) ocrByInst.set(inst, val);
+      }
+
+      const hdmiByInst = new Map<string, number>();
+      for (const r of hdmiRes) {
+        const inst = r.metric.instance || "unknown";
+        const val = Number.parseInt(r.value?.[1]);
+        if (!Number.isNaN(val)) hdmiByInst.set(inst, val);
+      }
+
+      const acByInst = new Map<string, number>();
+      for (const r of acRes) {
+        const inst = r.metric.instance || "unknown";
+        const val = Number.parseInt(r.value?.[1]);
+        if (!Number.isNaN(val)) acByInst.set(inst, val);
+      }
+
+      const dcByInst = new Map<string, number>();
+      for (const r of dcRes) {
+        const inst = r.metric.instance || "unknown";
+        const val = Number.parseInt(r.value?.[1]);
+        if (!Number.isNaN(val)) dcByInst.set(inst, val);
       }
 
       const upByInst = new Map<string, boolean>();
@@ -107,6 +147,10 @@ export class DeviceService {
           instance: inst,
           isOnline,
           cameraValue,
+          ocrValueSeconds: ocrByInst.has(inst) ? (ocrByInst.get(inst) as number) : null,
+          hdmiValue: hdmiByInst.has(inst) ? (hdmiByInst.get(inst) as number) : null,
+          acValue: acByInst.has(inst) ? (acByInst.get(inst) as number) : null,
+          dcValue: dcByInst.has(inst) ? (dcByInst.get(inst) as number) : null,
           cpuUsage,
           memoryUsage,
           statusMessage: this.statusMessage(cameraValue),
@@ -123,6 +167,10 @@ export class DeviceService {
         instance: inst,
         isOnline: false,
         cameraValue: null,
+        ocrValueSeconds: null,
+        hdmiValue: null,
+        acValue: null,
+        dcValue: null,
         cpuUsage: null,
         memoryUsage: null,
         statusMessage: this.statusMessage(null),
@@ -162,13 +210,21 @@ export class DeviceService {
     const promQlPattern = regexUnion.replace(/\\/g, "\\\\");
 
     const qCamera = `camera_value{instance=~\"${promQlPattern}\"}`;
+    const qOcr = `ocr_value_seconds{instance=~\"${promQlPattern}\"}`;
+    const qHdmi = `hdmi_value{instance=~\"${promQlPattern}\"}`;
+    const qAc = `ac_value{instance=~\"${promQlPattern}\"}`;
+    const qDc = `dc_value{instance=~\"${promQlPattern}\"}`;
     const qUp = `up{instance=~\"${promQlPattern}\"}`;
     const qCpu = `system_cpu_percent{instance=~\"${promQlPattern}\"}`;
     const qMem = `system_memory_percent{instance=~\"${promQlPattern}\"}`;
 
     try {
-      const [cameraRes, upRes, cpuRes, memRes] = await Promise.all([
+      const [cameraRes, ocrRes, hdmiRes, acRes, dcRes, upRes, cpuRes, memRes] = await Promise.all([
         this.prometheus.queryMetric(qCamera),
+        this.prometheus.queryMetric(qOcr),
+        this.prometheus.queryMetric(qHdmi),
+        this.prometheus.queryMetric(qAc),
+        this.prometheus.queryMetric(qDc),
         this.prometheus.queryMetric(qUp),
         this.prometheus.queryMetric(qCpu),
         this.prometheus.queryMetric(qMem),
@@ -181,6 +237,34 @@ export class DeviceService {
         const inst = r.metric.instance || "unknown";
         const val = Number.parseInt(r.value?.[1]);
         if (!Number.isNaN(val)) camByInst.set(inst, val);
+      }
+
+      const ocrByInst = new Map<string, number>();
+      for (const r of ocrRes) {
+        const inst = r.metric.instance || "unknown";
+        const val = Number.parseFloat(r.value?.[1]);
+        if (!Number.isNaN(val)) ocrByInst.set(inst, val);
+      }
+
+      const hdmiByInst = new Map<string, number>();
+      for (const r of hdmiRes) {
+        const inst = r.metric.instance || "unknown";
+        const val = Number.parseInt(r.value?.[1]);
+        if (!Number.isNaN(val)) hdmiByInst.set(inst, val);
+      }
+
+      const acByInst = new Map<string, number>();
+      for (const r of acRes) {
+        const inst = r.metric.instance || "unknown";
+        const val = Number.parseInt(r.value?.[1]);
+        if (!Number.isNaN(val)) acByInst.set(inst, val);
+      }
+
+      const dcByInst = new Map<string, number>();
+      for (const r of dcRes) {
+        const inst = r.metric.instance || "unknown";
+        const val = Number.parseInt(r.value?.[1]);
+        if (!Number.isNaN(val)) dcByInst.set(inst, val);
       }
 
       const upByInst = new Map<string, boolean>();
@@ -215,6 +299,10 @@ export class DeviceService {
           instance: inst,
           isOnline,
           cameraValue,
+          ocrValueSeconds: ocrByInst.has(inst) ? (ocrByInst.get(inst) as number) : null,
+          hdmiValue: hdmiByInst.has(inst) ? (hdmiByInst.get(inst) as number) : null,
+          acValue: acByInst.has(inst) ? (acByInst.get(inst) as number) : null,
+          dcValue: dcByInst.has(inst) ? (dcByInst.get(inst) as number) : null,
           cpuUsage,
           memoryUsage,
           statusMessage: this.statusMessage(cameraValue),
@@ -231,6 +319,10 @@ export class DeviceService {
         instance: inst,
         isOnline: false,
         cameraValue: null,
+        ocrValueSeconds: null,
+        hdmiValue: null,
+        acValue: null,
+        dcValue: null,
         cpuUsage: null,
         memoryUsage: null,
         statusMessage: this.statusMessage(null),
@@ -249,6 +341,10 @@ export class DeviceService {
           instance: s.instance,
           isOnline: s.isOnline,
           cameraValue: s.cameraValue ?? null,
+          ocrValueSeconds: s.ocrValueSeconds ?? null,
+          hdmiValue: s.hdmiValue ?? null,
+          acValue: s.acValue ?? null,
+          dcValue: s.dcValue ?? null,
           cpuUsage: s.cpuUsage ?? null,
           memoryUsage: s.memoryUsage ?? null,
           lastScraped: new Date(s.timestamp),
@@ -260,6 +356,10 @@ export class DeviceService {
             instance: s.instance,
             isOnline: s.isOnline,
             cameraValue: s.cameraValue ?? null,
+            ocrValueSeconds: s.ocrValueSeconds ?? null,
+            hdmiValue: s.hdmiValue ?? null,
+            acValue: s.acValue ?? null,
+            dcValue: s.dcValue ?? null,
             cpuUsage: s.cpuUsage ?? null,
             memoryUsage: s.memoryUsage ?? null,
             lastScraped: new Date(s.timestamp),
