@@ -333,7 +333,35 @@ export class DeviceService {
 
   async upsertStatuses(statuses: DeviceSnapshot[]): Promise<void> {
     if (!statuses || statuses.length === 0) return;
+
+    // 동일 IP의 여러 인스턴스가 있을 때, 비정상(camera_value != 0)을 우선 선택
+    const byIp = new Map<string, DeviceSnapshot>();
     for (const s of statuses) {
+      const prev = byIp.get(s.ip);
+      if (!prev) {
+        byIp.set(s.ip, s);
+        continue;
+      }
+      const prevVal = prev.cameraValue ?? 0;
+      const currVal = s.cameraValue ?? 0;
+      // 우선순위: (1) 비정상(>0) 우선, (2) 더 큰 값 우선, (3) 최신 timestamp 우선
+      const prevIsAbn = prevVal > 0;
+      const currIsAbn = currVal > 0;
+      if (currIsAbn && !prevIsAbn) {
+        byIp.set(s.ip, s);
+      } else if (currIsAbn === prevIsAbn) {
+        if (currVal > prevVal) {
+          byIp.set(s.ip, s);
+        } else if (currVal === prevVal) {
+          if (new Date(s.timestamp).getTime() > new Date(prev.timestamp).getTime()) {
+            byIp.set(s.ip, s);
+          }
+        }
+      }
+    }
+
+    const chosen = Array.from(byIp.values());
+    for (const s of chosen) {
       await db
         .insert(deviceInfos)
         .values({
