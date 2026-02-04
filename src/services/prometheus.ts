@@ -3,7 +3,7 @@ import dotenv from "dotenv";
 
 dotenv.config();
 
-const PROMETHEUS_BASE_URL = process.env.PROMETHEUS_URL || "http://localhost:9090";
+const PROMETHEUS_BASE_URL = process.env.PROMETHEUS_URL || "http://host.docker.internal:9090";
 
 interface PrometheusQueryResult {
   status: string;

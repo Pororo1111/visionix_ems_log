@@ -1,12 +1,31 @@
-version: '3.8'
-
 services:
+  app:
+    build: .
+    container_name: visionx-ems-log-app
+    restart: unless-stopped
+    command: npm run start:migrate
+    depends_on:
+      timescaledb:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: "postgresql://postgres:postgres@host.docker.internal:5433/visionx_ems_log"
+      NODE_ENV: production
+      DB_HOST: timescaledb
+      DB_PORT: 5433
+      DB_NAME: visionx_ems_log
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+    ports:
+      - "3001:3001"
+    networks:
+      - visionx-network
+
   timescaledb:
     image: timescale/timescaledb:latest-pg17
     container_name: visionx-ems-timescaledb
     restart: unless-stopped
     ports:
-      - "5433:5432"  # 웹서버 DB와 충돌 방지를 위해 5433 포트 사용
+      - "5433:5432"
     environment:
       POSTGRES_DB: visionx_ems_log
       POSTGRES_USER: postgres
